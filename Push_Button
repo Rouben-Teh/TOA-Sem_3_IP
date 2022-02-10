@@ -1,0 +1,279 @@
+//NEOPixels
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+#include <avr/power.h>
+#endif
+
+#define PIN 6
+#define NUMPIXELS 15
+
+float fade = 0;
+float fadeOut = 20;
+bool isFade = false;
+bool isFadeOut = false;
+
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
+
+//#define DELAYVAL 500
+
+//DFPlayer_Mini
+#include "Arduino.h"
+#include "SoftwareSerial.h"
+#include "DFRobotDFPlayerMini.h"
+
+SoftwareSerial mySoftwareSerial(10, 11); // RX, TX
+DFRobotDFPlayerMini myDFPlayer;
+void printDetail(uint8_t type, int value);
+
+bool isOnSoundPlaying = false;
+bool isOffSoundPlaying = false;
+bool isTimerSoundPlaying = false;
+
+// Button & Relay
+#define buttonPin 2
+#define relayPin 12
+
+int buttonState = 0;
+
+long closeTimer;         // the last time the output pin was toggled
+long openTimer;
+bool isRun = false;
+bool isCharge = true;
+bool forceClose = false;
+
+void setup() {
+  pinMode (relayPin, OUTPUT);
+  pinMode (buttonPin, INPUT);
+
+#if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+
+  pixels.begin();
+
+  mySoftwareSerial.begin(9600);
+  Serial.begin(115200);
+
+  Serial.println();
+  Serial.println(F("DFRobot DFPlayer Mini Demo"));
+  Serial.println(F("Initializing DFPlayer ... (May take 3~5 seconds)"));
+
+  if (!myDFPlayer.begin(mySoftwareSerial)) {  //Use softwareSerial to communicate with mp3.
+    Serial.println(F("Unable to begin:"));
+    Serial.println(F("1.Please recheck the connection!"));
+    Serial.println(F("2.Please insert the SD card!"));
+    while (true) {
+      delay(0); // Code to compatible with ESP8266 watch dog.
+    }
+  }
+  Serial.println(F("DFPlayer Mini online."));
+
+  myDFPlayer.volume(25);  //Set volume value (0~30).
+  myDFPlayer.EQ(DFPLAYER_EQ_NORMAL);
+  myDFPlayer.outputDevice(DFPLAYER_DEVICE_SD);
+
+  bool isOnSoundPlaying = false;
+  bool isOffSoundPlaying = false;
+  bool isTimerSoundPlaying = false;
+
+  myDFPlayer.play(1);
+  myDFPlayer.pause();
+}
+
+void loop() {
+  buttonState = digitalRead (buttonPin);
+
+  int sensorValue = analogRead(A0);
+  Serial.println(sensorValue);
+//  Serial.println(fadeOut);
+
+  if (sensorValue > 500)
+  {
+    if (isOnSoundPlaying == true)
+    {
+      isOnSoundPlaying = false;
+    }
+
+    digitalWrite (relayPin, HIGH); //for here HIGH = no power
+
+    isCharge = false;
+
+    if (sensorValue > 500 && millis() - closeTimer < 5000 && isRun == true)
+    {
+      for (int i = 0; i < NUMPIXELS; i++)
+        pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+      pixels.show();
+
+      pixels.setBrightness(fade);
+
+      if (isFade == false)
+      {
+        fade += 0.1;
+        if (fade >= 255)
+        {
+          isFade = true;
+        }
+      }
+      else
+      {
+        fade -= 0.1;
+        if (fade < 0)
+        {
+          isFade = false;
+        }
+      }
+    }
+
+    if (sensorValue > 500 && (millis() - closeTimer > 5000) && (millis() - closeTimer < 25000) && isRun == true)
+    {
+      isOffSoundPlaying = false;
+
+      if (isTimerSoundPlaying == false)
+      {
+        myDFPlayer.play(3);
+        isTimerSoundPlaying = true;
+      }
+
+      for (int i = 0; i < NUMPIXELS; i++)
+        pixels.setPixelColor(i, pixels.Color(255, 0, 0));
+      pixels.show();
+
+      pixels.setBrightness(fade);
+
+      if (isFade == false)
+      {
+        fade += 1;
+        if (fade >= 255)
+        {
+          isFade = true;
+        }
+      }
+      else
+      {
+        fade -= 1;
+        if (fade < 0)
+        {
+          isFade = false;
+        }
+      }
+    }
+
+    if (sensorValue > 500 && millis() - closeTimer > 25000  && isRun == true)
+    {
+      isTimerSoundPlaying = false;
+
+      if (isOffSoundPlaying == false)
+      {
+        myDFPlayer.play(2);
+        isOffSoundPlaying = true;
+      }
+
+      for (int i = 0; i < NUMPIXELS; i++)
+        pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+      pixels.show();
+
+      pixels.setBrightness(fadeOut);
+
+      if (isFadeOut == false)
+      {
+        fadeOut -= 0.1;
+        if (fadeOut < 0)
+        {
+          isFadeOut = true;
+        }
+      }
+
+      else
+      {
+        pixels.clear();
+        isRun = false;
+      }
+    }
+
+    openTimer = millis();
+  }
+
+  if (sensorValue < 500 && millis() - openTimer > 200)
+  {
+    isRun = true;
+    isCharge = true;
+    forceClose = false;
+
+    fadeOut = 255;
+    isFadeOut = false;
+
+    if (isOnSoundPlaying == false)
+    {
+      myDFPlayer.play(1);
+      isOnSoundPlaying = true;
+      isOffSoundPlaying = false;
+      isTimerSoundPlaying = false;
+    }
+
+    digitalWrite (relayPin, LOW);
+
+    for (int i = 0; i < NUMPIXELS; i++)
+      pixels.setPixelColor(i, pixels.Color(255, 255, 255));
+    pixels.show();
+
+    pixels.setBrightness(fade);
+
+    if (isFade == false)
+    {
+      fade += 0.1;
+      if (fade >= 255)
+      {
+        isFade = true;
+      }
+    }
+    else
+    {
+      fade -= 0.1;
+      if (fade < 0)
+      {
+        isFade = false;
+      }
+    }
+
+    closeTimer = millis();
+  }
+
+  if (buttonState == HIGH && isCharge == false)
+  {
+    forceClose = true;
+  }
+
+  if (forceClose == true)
+  {
+    isRun = false;
+
+    isTimerSoundPlaying = false;
+
+    if (isOffSoundPlaying == false)
+    {
+      myDFPlayer.play(2);
+      isOffSoundPlaying = true;
+    }
+
+    for (int i = 0; i < NUMPIXELS; i++)
+      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
+    pixels.show();
+
+    pixels.setBrightness(fadeOut);
+
+    if (isFadeOut == false)
+    {
+      fadeOut -= 0.1;
+      if (fadeOut < 0)
+      {
+        isFadeOut = true;
+      }
+    }
+
+    else
+    {
+      pixels.clear();
+      forceClose = false;
+    }
+  }
+}
