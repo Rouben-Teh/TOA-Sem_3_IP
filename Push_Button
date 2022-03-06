@@ -4,13 +4,17 @@
 #include <avr/power.h>
 #endif
 
+#define FiveVPin 3
 #define PIN 6
-#define NUMPIXELS 15
+#define NUMPIXELS 24
 
 float fade = 0;
 float fadeOut = 20;
 bool isFade = false;
 bool isFadeOut = false;
+
+bool isFilled = false;
+bool isCleared = false;
 
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
@@ -42,6 +46,7 @@ bool isCharge = true;
 bool forceClose = false;
 
 void setup() {
+  pinMode (FiveVPin, OUTPUT);
   pinMode (relayPin, OUTPUT);
   pinMode (buttonPin, INPUT);
 
@@ -81,14 +86,18 @@ void setup() {
 }
 
 void loop() {
+  digitalWrite (FiveVPin, HIGH);
+
   buttonState = digitalRead (buttonPin);
 
   int sensorValue = analogRead(A0);
   Serial.println(sensorValue);
-//  Serial.println(fadeOut);
+  //  Serial.println(fadeOut);
 
   if (sensorValue > 500)
   {
+    isFilled = false;
+
     if (isOnSoundPlaying == true)
     {
       isOnSoundPlaying = false;
@@ -100,28 +109,7 @@ void loop() {
 
     if (sensorValue > 500 && millis() - closeTimer < 5000 && isRun == true)
     {
-      for (int i = 0; i < NUMPIXELS; i++)
-        pixels.setPixelColor(i, pixels.Color(255, 255, 255));
-      pixels.show();
-
-      pixels.setBrightness(fade);
-
-      if (isFade == false)
-      {
-        fade += 0.1;
-        if (fade >= 255)
-        {
-          isFade = true;
-        }
-      }
-      else
-      {
-        fade -= 0.1;
-        if (fade < 0)
-        {
-          isFade = false;
-        }
-      }
+      colorFade(pixels.Color(127, 127, 127));
     }
 
     if (sensorValue > 500 && (millis() - closeTimer > 5000) && (millis() - closeTimer < 25000) && isRun == true)
@@ -134,28 +122,7 @@ void loop() {
         isTimerSoundPlaying = true;
       }
 
-      for (int i = 0; i < NUMPIXELS; i++)
-        pixels.setPixelColor(i, pixels.Color(255, 0, 0));
-      pixels.show();
-
-      pixels.setBrightness(fade);
-
-      if (isFade == false)
-      {
-        fade += 1;
-        if (fade >= 255)
-        {
-          isFade = true;
-        }
-      }
-      else
-      {
-        fade -= 1;
-        if (fade < 0)
-        {
-          isFade = false;
-        }
-      }
+      colorFadeWarning(pixels.Color(255, 0, 0));
     }
 
     if (sensorValue > 500 && millis() - closeTimer > 25000  && isRun == true)
@@ -168,25 +135,15 @@ void loop() {
         isOffSoundPlaying = true;
       }
 
-      for (int i = 0; i < NUMPIXELS; i++)
-        pixels.setPixelColor(i, pixels.Color(0, 0, 255));
-      pixels.show();
-
-      pixels.setBrightness(fadeOut);
-
-      if (isFadeOut == false)
+      if (isCleared == false)
       {
-        fadeOut -= 0.1;
-        if (fadeOut < 0)
-        {
-          isFadeOut = true;
-        }
+        colorSet(pixels.Color(0, 0, 255));
+        colorWipe(pixels.Color(0, 0, 0), 50);
       }
-
-      else
+      if (isCleared == true)
       {
         pixels.clear();
-        isRun = false;
+        forceClose = false;
       }
     }
 
@@ -199,8 +156,9 @@ void loop() {
     isCharge = true;
     forceClose = false;
 
-    fadeOut = 255;
+    fadeOut = 150;
     isFadeOut = false;
+    isCleared = false;
 
     if (isOnSoundPlaying == false)
     {
@@ -212,27 +170,14 @@ void loop() {
 
     digitalWrite (relayPin, LOW);
 
-    for (int i = 0; i < NUMPIXELS; i++)
-      pixels.setPixelColor(i, pixels.Color(255, 255, 255));
-    pixels.show();
-
-    pixels.setBrightness(fade);
-
-    if (isFade == false)
+    if (isFilled == false)
     {
-      fade += 0.1;
-      if (fade >= 255)
-      {
-        isFade = true;
-      }
+      colorFill(pixels.Color(127, 127, 127), 50);
     }
-    else
+
+    if (isFilled == true)
     {
-      fade -= 0.1;
-      if (fade < 0)
-      {
-        isFade = false;
-      }
+      colorFade(pixels.Color(127, 127, 127));
     }
 
     closeTimer = millis();
@@ -255,25 +200,115 @@ void loop() {
       isOffSoundPlaying = true;
     }
 
-    for (int i = 0; i < NUMPIXELS; i++)
-      pixels.setPixelColor(i, pixels.Color(0, 0, 255));
-    pixels.show();
-
-    pixels.setBrightness(fadeOut);
-
-    if (isFadeOut == false)
+    if (isCleared == false)
     {
-      fadeOut -= 0.1;
-      if (fadeOut < 0)
-      {
-        isFadeOut = true;
-      }
+      colorSet(pixels.Color(0, 0, 255));
+      colorWipe(pixels.Color(0, 0, 0), 50);
     }
-
-    else
+    if (isCleared == true)
     {
       pixels.clear();
       forceClose = false;
     }
+  }
+}
+
+void colorSet(uint32_t color) {
+  for (int i = 0; i < NUMPIXELS; i++)
+    pixels.setPixelColor(i, color);
+  pixels.show();
+}
+
+void colorFill(uint32_t color, int wait) {
+  pixels.setBrightness(100);
+  pixels.clear();
+  for (int i = 0; i < pixels.numPixels(); i++) { // For each pixel in strip...
+    pixels.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+    pixels.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
+    isFilled = true;
+  }
+}
+
+void colorWipe(uint32_t color, int wait) {
+  pixels.setBrightness(100);
+  for (int i = 24; i >= 0; i--) { // For each pixel in strip...
+    pixels.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+    pixels.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
+    isCleared = true;
+  }
+}
+
+void colorFade(uint32_t color) {
+  for (int i = 0; i < NUMPIXELS; i++)
+    pixels.setPixelColor(i, color);
+  pixels.show();
+
+  pixels.setBrightness(fade);
+
+  if (isFade == false)
+  {
+    fade += 0.1;
+    if (fade >= 150)
+    {
+      isFade = true;
+    }
+  }
+  else
+  {
+    fade -= 0.1;
+    if (fade < 0)
+    {
+      isFade = false;
+    }
+  }
+}
+
+void colorFadeWarning(uint32_t color) {
+  for (int i = 0; i < NUMPIXELS; i++)
+    pixels.setPixelColor(i, color);
+  pixels.show();
+
+  pixels.setBrightness(fade);
+
+  if (isFade == false)
+  {
+    fade += 1;
+    if (fade >= 255)
+    {
+      isFade = true;
+    }
+  }
+  else
+  {
+    fade -= 1;
+    if (fade < 0)
+    {
+      isFade = false;
+    }
+  }
+}
+
+void colorFadeOut(uint32_t color) {
+  for (int i = 0; i < NUMPIXELS; i++)
+    pixels.setPixelColor(i, color);
+  pixels.show();
+
+  pixels.setBrightness(fadeOut);
+
+  if (isFadeOut == false)
+  {
+    fadeOut -= 0.1;
+    if (fadeOut < 0)
+    {
+      isFadeOut = true;
+    }
+  }
+
+  else
+  {
+    pixels.clear();
+    forceClose = false;
   }
 }
